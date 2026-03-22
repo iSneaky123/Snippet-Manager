@@ -1,40 +1,53 @@
 mod handlers;
 mod models;
+mod parser;
 mod storage;
 
+use parser::ArgParser;
+
+use crate::handlers::{handle_add, handle_help, handle_list, handle_remove};
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let mut parser = ArgParser::new();
+    let cmd = parser.cmd().map(|s| s.to_lowercase());
 
-    match args.as_slice() {
-        [_, cmd, rest @ ..] if cmd == "list" => {
-            let verbose = rest.iter().any(|arg| arg == "-v" || arg == "--verbose");
-            let search_term = rest
-                .iter()
-                .find(|arg| !arg.starts_with("-"))
-                .cloned()
+    let exit_on_error = |e: String| -> ! {
+        eprintln!("{e}");
+        std::process::exit(1)
+    };
+
+    match cmd.as_deref() {
+        Some("add") => {
+            let tag = parser
+                .get_value("-t", "--tag")
+                .unwrap_or_else(|e| exit_on_error(e))
                 .unwrap_or_default();
-
-            handlers::handle_list(search_term, verbose);
-        }
-        [_, cmd, rest @ ..] if cmd == "remove" || cmd == "rm" => {
-            let verbose = rest.iter().any(|arg| arg == "-v" || arg == "--verbose");
-            let search_term = rest
-                .iter()
-                .find(|arg| !arg.starts_with("-"))
-                .cloned()
+            let desc = parser
+                .get_value("-d", "--description")
+                .unwrap_or_else(|e| exit_on_error(e))
                 .unwrap_or_default();
+            let content = parser.get_content().unwrap_or_else(|e| exit_on_error(e));
 
-            handlers::handle_remove(search_term, verbose);
+            if content.is_empty() {
+                panic!("Cannot add a snippet without content");
+            }
+
+            handle_add(content, tag, desc);
         }
-        [_, cmd, content, rest @ ..] if cmd == "add" => {
-            let content = content.to_string();
-            let tag = rest.get(0).cloned().unwrap_or_default();
-            let desc = rest.get(1).cloned().unwrap_or_default();
+        Some("list") | Some("li") => {
+            let verbose = parser.has_flag("-v", "--verbose");
+            let search_term = parser.get_content().unwrap_or_else(|e| exit_on_error(e));
 
-            handlers::handle_add(content, tag, desc);
+            handle_list(search_term, verbose);
+        }
+        Some("remove") | Some("rm") => {
+            let verbose = parser.has_flag("-v", "--verbose");
+            let search_term = parser.get_content().unwrap_or_else(|e| exit_on_error(e));
+
+            handle_remove(search_term, verbose);
         }
         _ => {
-            print!("Usage: add <content> [tag] [desc]");
+            handle_help(parser.bin_name().as_str());
         }
     }
 }

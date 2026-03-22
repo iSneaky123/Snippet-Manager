@@ -130,3 +130,31 @@ fn filter_and_sort_snippets<'a>(query_str: &str, snippets: &'a [Snippet]) -> Vec
 
     results
 }
+
+pub fn handle_help(bin: &str) {
+    let help_text = format!(
+        r#"
+{bin} - A tiny snippet manager for your terminal
+
+USAGE:
+    {bin} <SUBCOMMAND> [OPTIONS] [CONTENT]
+
+SUBCOMMANDS:
+    add                 Create a new snippet
+    list, li            List all snippets (supports searching)
+    remove, rm          Delete snippets matching a search term
+
+OPTIONS:
+    -t, --tag <tag>           Categorize your snippet
+    -d, --description <desc>  Add extra context to a snippet
+    -v, --verbose             Show extra details in output
+
+EXAMPLES:
+    {bin} add "git clone ssh:url" -t git -d "clone repo"
+    {bin} list "git" --verbose
+    {bin} rm "git clone"
+"#,
+        bin = bin
+    );
+    println!("{help_text}");
+}
