@@ -20,10 +20,11 @@ impl Snippet {
     }
 
     fn generate_id() -> String {
-        let secs = SystemTime::now()
+        let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        format!("{:x}", secs)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+
+        format!("{:x}", now)
     }
 }

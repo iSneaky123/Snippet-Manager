@@ -1,160 +1,157 @@
 use std::io::{self, Write};
-use std::usize;
 
-use crate::models::Snippet;
-use crate::storage::{load_snippets, save_snippets};
-
+use anyhow::{Result, anyhow, bail};
 use nucleo::{Config, Matcher, Utf32Str};
 
-pub fn handle_add(content: String, tag: String, desc: String) {
-    let new_snip = Snippet::new(content, tag, desc);
+use crate::{
+    models::Snippet,
+    storage::{load_snippets, save_snippets},
+};
 
-    let mut snippets = load_snippets();
-    snippets.push(new_snip);
+pub fn handle_add(content: String, tag: String, description: String) -> Result<()> {
+    let new_snippet = Snippet::new(content, tag, description);
 
-    save_snippets(&snippets);
-    println!("Saved Snippet successfully!");
+    let mut snippets = load_snippets()?;
+    snippets.push(new_snippet);
+
+    save_snippets(&snippets)?;
+    println!("Saved Snippet suffessfully");
+    Ok(())
 }
 
-pub fn handle_list(search_term: String, verbose: bool) {
-    let snippets = load_snippets();
-    let filtered_snippets = filter_and_sort_snippets(&search_term, &snippets);
-    print_snippets(&filtered_snippets, verbose);
+pub fn handle_list(search_term: &str, verbose: bool) -> Result<()> {
+    let snippets = load_snippets()?;
+    let filtered = filter_and_sort_snippets(&search_term, &snippets);
+
+    if filtered.is_empty() {
+        println!("No snippets were found");
+        return Ok(());
+    }
+
+    print_snippets(&filtered, verbose);
+    Ok(())
 }
 
-pub fn handle_remove(search_term: String, verbose: bool) {
-    let mut snippets = load_snippets();
-    let filtered_snippets = filter_and_sort_snippets(&search_term, &snippets);
+pub fn handle_remove(search_term: &str, verbose: bool) -> Result<()> {
+    let mut snippets = load_snippets()?;
+    let filtered = filter_and_sort_snippets(&search_term, &snippets);
 
-    print_snippets(&filtered_snippets, verbose);
+    if filtered.is_empty() {
+        println!("No snippets were found");
+        return Ok(());
+    }
+
+    let all_snippet_refs: Vec<&Snippet> = snippets.iter().collect();
+    print_snippets(&all_snippet_refs, verbose);
 
     print!("\nEnter Sr No. to delete (or 'q' to cancel): ");
-    io::stdout().flush().unwrap();
+    io::stdout().flush()?;
 
     let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read line");
+    io::stdin().read_line(&mut input)?;
 
     let input = input.trim();
     if input == "q" {
-        println!("No snippets were removed!");
-        return;
+        println!("Aborted!");
+        return Ok(());
     }
 
-    match input.parse::<usize>() {
-        Ok(sr_no) if sr_no > 0 && sr_no <= filtered_snippets.len() => {
-            let target_id = &filtered_snippets[sr_no - 1].id.clone();
+    let sr_no: usize = input
+        .parse()
+        .map_err(|_| anyhow!("'{}' is not a valid number", input))?;
 
-            print!(
-                "Are you sure you want to delete the following Snippet (ID: {})? (Y/N): ",
-                target_id
-            );
-            io::stdout().flush().unwrap();
-
-            let mut confirm = String::new();
-            io::stdin().read_line(&mut confirm).ok();
-
-            if confirm.trim().to_lowercase() == "y" {
-                snippets.retain(|s| &s.id != target_id);
-                save_snippets(&snippets);
-                println!("Removed Snippet successfully!");
-            } else {
-                println!("Aborted! No snippets were removed");
-            }
-        }
-        _ => println!("Invalid input. Please enter a valid Sr No."),
+    if sr_no <= 0 || sr_no > filtered.len() {
+        bail!("Sr No. {} is out of range (1-{})", sr_no, filtered.len());
     }
+
+    let target_id = filtered[sr_no - 1].id.clone();
+
+    print!("Confirm deleteion of ID: {}? (y/N): ", target_id);
+    io::stdout().flush()?;
+
+    let mut confirm = String::new();
+    io::stdin().read_line(&mut confirm)?;
+
+    if confirm.trim().to_lowercase() == "y" {
+        snippets.retain(|s| s.id != target_id);
+        save_snippets(&snippets)?;
+        println!("Removed snippet successfully");
+    } else {
+        println!("Aborted!");
+    };
+
+    Ok(())
 }
 
 fn print_snippets(snippets: &[&Snippet], verbose: bool) {
-    if snippets.is_empty() {
-        eprintln!("No snippets found...");
-        std::process::exit(0)
-    }
-
     let mut current_tag: Option<String> = None;
 
-    for (idx, s) in snippets.iter().enumerate() {
-        let display_tag = if s.tag.is_empty() { "NO TAG" } else { &s.tag };
+    for (idx, &s) in snippets.iter().enumerate() {
+        let display_tag = if s.tag.trim().is_empty() {
+            "UNTAGGED".to_string()
+        } else {
+            s.tag.to_ascii_uppercase()
+        };
 
-        // Print tags only once
-        if current_tag.as_deref() != Some(display_tag) {
-            println!("\n=== TAG: {} ===", display_tag.to_uppercase());
-            current_tag = Some(display_tag.to_string());
+        if current_tag.as_deref() != Some(&display_tag) {
+            println!("\n[ {} ]", display_tag);
+            current_tag = Some(display_tag);
         }
 
-        println!("Sr No.: {}", idx + 1);
-        println!("ID: {}", s.id);
-        println!("Snippet: ");
+        println!("{}. ID: {}", idx + 1, s.id);
+
         for line in s.content.lines() {
-            println!("  {}", line);
+            println!("    {}", line);
         }
-        if verbose {
-            println!("Description: ");
-            for line in s.description.lines() {
-                println!("  {}", line);
-            }
+
+        if verbose && !s.description.trim().is_empty() {
+            println!("Description:");
+            println!("    {}", s.description);
         }
-        println!()
+
+        if idx < snippets.len() - 1 {
+            println!();
+        }
     }
 }
 
-fn filter_and_sort_snippets<'a>(query_str: &str, snippets: &'a [Snippet]) -> Vec<&'a Snippet> {
-    let mut results: Vec<&Snippet> = if query_str.is_empty() {
-        snippets.iter().collect()
-    } else {
-        let mut matcher = Matcher::new(Config::DEFAULT);
-        let mut query_buf = vec![];
-        let query_utf32 = Utf32Str::new(query_str, &mut query_buf);
-        let mut snapshot_buf = vec![];
+fn filter_and_sort_snippets<'a>(search_term: &str, snippets: &'a [Snippet]) -> Vec<&'a Snippet> {
+    if search_term.trim().is_empty() {
+        let mut all: Vec<&Snippet> = snippets.iter().collect();
+        all.sort_by_key(|s| s.tag.to_lowercase());
+        return all;
+    }
 
-        snippets
-            .iter()
-            .filter(|s| {
-                let mut check = |text: &str, match_score: u16| {
-                    let haystack = Utf32Str::new(text, &mut snapshot_buf);
-                    if let Some(score) = matcher.fuzzy_match(haystack, query_utf32) {
-                        score > match_score
-                    } else {
-                        false
-                    }
-                };
+    let mut matcher = Matcher::new(Config::DEFAULT);
 
-                check(&s.tag, 50) || check(&s.description, 75) || check(&s.id, 25)
+    let mut query_buf = vec![];
+    let query_utf32 = Utf32Str::new(search_term, &mut query_buf);
+
+    let mut results: Vec<&Snippet> = snippets
+        .iter()
+        .filter(|s| {
+            let fields = [
+                (s.tag.as_str(), 50),
+                (s.description.as_str(), 75),
+                (s.content.as_str(), 75),
+                (s.id.as_str(), 25),
+            ];
+
+            fields.iter().any(|(text, min_score)| {
+                if text.trim().is_empty() {
+                    return false;
+                }
+
+                let mut haystack_buf = vec![];
+                let haystack = Utf32Str::new(text, &mut haystack_buf);
+                matcher
+                    .fuzzy_match(haystack, query_utf32)
+                    .map(|score| score >= *min_score)
+                    .unwrap_or(false)
             })
-            .collect()
-    };
+        })
+        .collect();
 
-    results.sort_by(|a, b| a.tag.to_lowercase().cmp(&b.tag.to_lowercase()));
-
+    results.sort_by_key(|s| s.tag.to_lowercase());
     results
-}
-
-pub fn handle_help(bin: &str) {
-    let help_text = format!(
-        r#"
-{bin} - A tiny snippet manager for your terminal
-
-USAGE:
-    {bin} <SUBCOMMAND> [OPTIONS] [CONTENT]
-
-SUBCOMMANDS:
-    add                 Create a new snippet
-    list, li            List all snippets (supports searching)
-    remove, rm          Delete snippets matching a search term
-
-OPTIONS:
-    -t, --tag <tag>           Categorize your snippet
-    -d, --description <desc>  Add extra context to a snippet
-    -v, --verbose             Show extra details in output
-
-EXAMPLES:
-    {bin} add "git clone ssh:url" -t git -d "clone repo"
-    {bin} list "git" --verbose
-    {bin} rm "git clone"
-"#,
-        bin = bin
-    );
-    println!("{help_text}");
 }

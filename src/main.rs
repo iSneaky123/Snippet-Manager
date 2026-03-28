@@ -1,53 +1,77 @@
 mod handlers;
 mod models;
-mod parser;
 mod storage;
 
-use parser::ArgParser;
+use clap::{Parser, Subcommand};
 
-use crate::handlers::{handle_add, handle_help, handle_list, handle_remove};
+use crate::handlers::{handle_add, handle_list, handle_remove};
 
-fn main() {
-    let mut parser = ArgParser::new();
-    let cmd = parser.cmd().map(|s| s.to_lowercase());
+#[derive(Parser)]
+#[command(name = "snip")]
+/// A tiny snippet manager for your terminal
+#[command(about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
 
-    let exit_on_error = |e: String| -> ! {
-        eprintln!("{e}");
-        std::process::exit(1)
-    };
+#[derive(Subcommand)]
+enum Commands {
+    /// Add a new snippet in the snippet manager
+    Add {
+        /// The actual content of the snippet
+        content: String,
+        /// Categorize your snippets with a tag (e.g. -t rust)
+        #[arg(short, long, default_value = "")]
+        tag: String,
+        /// Add extra context or explaination for your snippet
+        #[arg(short, long, default_value = "")]
+        description: String,
+    },
+    /// List and search through your saved snippets
+    #[command(alias = "li")]
+    List {
+        /// Optional Search query
+        #[arg(default_value = "")]
+        query: String,
+        /// Show snippets along with their descriptions
+        #[arg(short, long)]
+        verbose: bool,
+    },
+    /// Interactive remove a snippet matching a search query
+    #[command(alias = "rm")]
+    Remove {
+        /// Search query to find the snippet you want to delete
+        #[arg(default_value = "")]
+        query: String,
+        /// Show snippets along with their descriptions
+        #[arg(short, long)]
+        verbose: bool,
+    },
+}
 
-    match cmd.as_deref() {
-        Some("add") => {
-            let tag = parser
-                .get_value("-t", "--tag")
-                .unwrap_or_else(|e| exit_on_error(e))
-                .unwrap_or_default();
-            let desc = parser
-                .get_value("-d", "--description")
-                .unwrap_or_else(|e| exit_on_error(e))
-                .unwrap_or_default();
-            let content = parser.get_content().unwrap_or_else(|e| exit_on_error(e));
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
 
-            if content.is_empty() {
-                panic!("Cannot add a snippet without content");
-            }
-
-            handle_add(content, tag, desc);
+    match cli.command {
+        Some(Commands::Add {
+            content,
+            tag,
+            description,
+        }) => {
+            handle_add(content, tag, description)?;
         }
-        Some("list") | Some("li") => {
-            let verbose = parser.has_flag("-v", "--verbose");
-            let search_term = parser.get_content().unwrap_or_else(|e| exit_on_error(e));
-
-            handle_list(search_term, verbose);
+        Some(Commands::Remove { query, verbose }) => {
+            handle_remove(&query, verbose)?;
         }
-        Some("remove") | Some("rm") => {
-            let verbose = parser.has_flag("-v", "--verbose");
-            let search_term = parser.get_content().unwrap_or_else(|e| exit_on_error(e));
-
-            handle_remove(search_term, verbose);
+        Some(Commands::List { query, verbose }) => {
+            handle_list(&query, verbose)?;
         }
-        _ => {
-            handle_help(parser.bin_name().as_str());
+        None => {
+            use clap::CommandFactory;
+            Cli::command().print_help()?;
         }
     }
+
+    Ok(())
 }
