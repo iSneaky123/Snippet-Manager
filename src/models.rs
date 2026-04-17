@@ -7,15 +7,17 @@ pub struct Snippet {
     pub content: String,
     pub tag: String,
     pub description: String,
+    pub shell_type: String,
 }
 
 impl Snippet {
-    pub fn new(content: String, tag: String, description: String) -> Self {
+    pub fn new(content: String, tag: String, description: String, shell_type: String) -> Self {
         Snippet {
             id: Self::generate_id(),
             content,
             tag,
             description,
+            shell_type,
         }
     }
 

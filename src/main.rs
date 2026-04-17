@@ -27,6 +27,9 @@ enum Commands {
         /// Add extra context or explaination for your snippet
         #[arg(short, long, default_value = "")]
         description: String,
+        /// Sets default shell which is to be used for the following command's execution
+        #[arg(short, long, default_value = "")]
+        shell_type: String,
     },
     /// List and search through your saved snippets
     #[command(alias = "li")]
@@ -48,6 +51,19 @@ enum Commands {
         #[arg(short, long)]
         verbose: bool,
     },
+    /// Interactive execute a snippet matching a search query
+    #[command(alias = "ex", alias = "exec")]
+    Execute {
+        /// Search query to find the snippet you want to execute
+        #[arg(default_value = "")]
+        query: String,
+        /// Overrides the default shell for command execution if provided
+        #[arg(short, long, default_value = "")]
+        shell_type: String,
+        /// Show snippets along with their descriptions
+        #[arg(short, long)]
+        verbose: bool,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -58,6 +74,7 @@ fn main() -> anyhow::Result<()> {
             content,
             tag,
             description,
+            shell_type,
         }) => {
             handle_add(content, tag, description)?;
         }
@@ -67,6 +84,14 @@ fn main() -> anyhow::Result<()> {
         Some(Commands::List { query, verbose }) => {
             handle_list(&query, verbose)?;
         }
+        Some(Commands::Execute {
+            query,
+            shell_type,
+            verbose,
+        }) => {
+            todo!()
+        }
+
         None => {
             use clap::CommandFactory;
             Cli::command().print_help()?;
