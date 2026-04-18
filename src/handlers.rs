@@ -1,8 +1,11 @@
 mod helpers;
 
-use std::io::{self, Write};
+use std::{
+    io::{self, Stderr, Write},
+    process::{Command, Stdio},
+};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use crate::{
     handlers::helpers::{filter_and_display_snippets, get_confirmation, get_target_id},
@@ -56,7 +59,7 @@ pub fn handle_remove(search_term: &str, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn handle_execute(search_term: &str, verbose: bool, shell_type: String) -> Result<()> {
+pub fn handle_execute(search_term: &str, verbose: bool, shell_type: &str) -> Result<()> {
     let snippets = load_snippets()?;
     let filtered = filter_and_display_snippets(&snippets, search_term, verbose);
 
@@ -75,7 +78,22 @@ pub fn handle_execute(search_term: &str, verbose: bool, shell_type: String) -> R
     io::stdout().flush()?;
 
     if get_confirmation()? {
-        todo!();
+        let Some(snippet) = snippets.iter().find(|s| s.id == target_id) else {
+            bail!("Couldn't find any snippet with the id: {}", target_id);
+        };
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg(snippet.content.to_string())
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()?;
+
+        let status = child.wait()?;
+
+        if !status.success() {
+            eprintln!("Command exited with error: {}", status);
+        }
     } else {
         println!("Aborted!");
     }

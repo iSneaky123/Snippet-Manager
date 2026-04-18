@@ -4,7 +4,7 @@ mod storage;
 
 use clap::{Parser, Subcommand};
 
-use crate::handlers::{handle_add, handle_list, handle_remove};
+use crate::handlers::{handle_add, handle_execute, handle_list, handle_remove};
 
 #[derive(Parser)]
 #[command(name = "snip")]
@@ -89,7 +89,7 @@ fn main() -> anyhow::Result<()> {
             shell_type,
             verbose,
         }) => {
-            todo!()
+            handle_execute(&query, verbose, &shell_type)?;
         }
 
         None => {
