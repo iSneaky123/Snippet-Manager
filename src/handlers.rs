@@ -1,7 +1,8 @@
 mod helpers;
+mod shell_manager;
 
 use std::{
-    io::{self, Stderr, Write},
+    io::{self, Write},
     process::{Command, Stdio},
 };
 
@@ -13,8 +14,13 @@ use crate::{
     storage::{load_snippets, save_snippets},
 };
 
-pub fn handle_add(content: String, tag: String, description: String) -> Result<()> {
-    let new_snippet = Snippet::new(content, tag, description, String::new());
+pub fn handle_add(
+    content: String,
+    tag: Option<String>,
+    description: Option<String>,
+    shell_type: Option<String>,
+) -> Result<()> {
+    let new_snippet = Snippet::new(content, tag, description, shell_type)?;
 
     let mut snippets = load_snippets()?;
     snippets.push(new_snippet);
@@ -24,13 +30,13 @@ pub fn handle_add(content: String, tag: String, description: String) -> Result<(
     Ok(())
 }
 
-pub fn handle_list(search_term: &str, verbose: bool) -> Result<()> {
+pub fn handle_list(search_term: Option<String>, verbose: bool) -> Result<()> {
     let snippets = load_snippets()?;
     filter_and_display_snippets(&snippets, search_term, verbose);
     Ok(())
 }
 
-pub fn handle_remove(search_term: &str, verbose: bool) -> Result<()> {
+pub fn handle_remove(search_term: Option<String>, verbose: bool) -> Result<()> {
     let mut snippets = load_snippets()?;
     let filtered = filter_and_display_snippets(&snippets, search_term, verbose);
 
@@ -59,7 +65,11 @@ pub fn handle_remove(search_term: &str, verbose: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn handle_execute(search_term: &str, verbose: bool, shell_type: &str) -> Result<()> {
+pub fn handle_execute(
+    search_term: Option<String>,
+    _shell_type: Option<String>,
+    verbose: bool,
+) -> Result<()> {
     let snippets = load_snippets()?;
     let filtered = filter_and_display_snippets(&snippets, search_term, verbose);
 
@@ -83,7 +93,7 @@ pub fn handle_execute(search_term: &str, verbose: bool, shell_type: &str) -> Res
         };
         let mut child = Command::new("sh")
             .arg("-c")
-            .arg(snippet.content.to_string())
+            .arg(&snippet.content)
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())

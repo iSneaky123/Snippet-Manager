@@ -9,12 +9,7 @@ pub(super) fn print_snippets(snippets: &[&Snippet], verbose: bool) {
     let mut current_tag: Option<String> = None;
 
     for (idx, &s) in snippets.iter().enumerate() {
-        let display_tag = if s.tag.trim().is_empty() {
-            "UNTAGGED".to_string()
-        } else {
-            s.tag.to_ascii_uppercase()
-        };
-
+        let display_tag = s.display_tag();
         if current_tag.as_deref() != Some(&display_tag) {
             println!("\n[ {} ]", display_tag);
             current_tag = Some(display_tag);
@@ -26,9 +21,9 @@ pub(super) fn print_snippets(snippets: &[&Snippet], verbose: bool) {
             println!("    {}", line);
         }
 
-        if verbose && !s.description.trim().is_empty() {
+        if verbose && !s.desc_or_default().trim().is_empty() {
             println!("Description:");
-            println!("    {}", s.description);
+            println!("    {}", s.desc_or_default());
         }
 
         if idx + 1 < snippets.len() {
@@ -39,28 +34,29 @@ pub(super) fn print_snippets(snippets: &[&Snippet], verbose: bool) {
 
 pub(super) fn filter_and_sort_snippets<'a>(
     snippets: &'a [Snippet],
-    search_term: &str,
+    search_term: Option<String>,
 ) -> Vec<&'a Snippet> {
-    if search_term.trim().is_empty() {
-        let mut all: Vec<&Snippet> = snippets.iter().collect();
-        all.sort_by_key(|s| s.tag.to_lowercase());
-        return all;
-    }
+    let Some(search_term) = search_term else {
+        return sort_by_tag(snippets);
+    };
+
+    const AGRESSIVE_SEARCH: u16 = 49;
+    const STRICT_SEARCH: u16 = 74;
 
     let mut matcher = Matcher::new(Config::DEFAULT);
 
     let mut query_buf = vec![];
-    let query_utf31 = Utf32Str::new(search_term, &mut query_buf);
+    let query_utf32 = Utf32Str::new(&search_term, &mut query_buf);
     let mut haystack_buf = vec![];
 
-    let mut results: Vec<&Snippet> = snippets
+    let results: Vec<&Snippet> = snippets
         .iter()
         .filter(|s| {
             let fields = [
-                (s.tag.as_str(), 49),
-                (s.description.as_str(), 74),
-                (s.content.as_str(), 74),
-                (s.id.as_str(), 49),
+                (s.tag_or_default(), STRICT_SEARCH),
+                (s.desc_or_default(), AGRESSIVE_SEARCH),
+                (s.content.as_str(), AGRESSIVE_SEARCH),
+                (s.id.as_str(), STRICT_SEARCH),
             ];
 
             fields.iter().any(|(text, min_score)| {
@@ -71,15 +67,14 @@ pub(super) fn filter_and_sort_snippets<'a>(
                 haystack_buf.clear();
                 let haystack = Utf32Str::new(text, &mut haystack_buf);
                 matcher
-                    .fuzzy_match(haystack, query_utf31)
+                    .fuzzy_match(haystack, query_utf32)
                     .map(|score| score >= *min_score)
                     .unwrap_or(false)
             })
         })
         .collect();
 
-    results.sort_by_key(|s| s.tag.to_lowercase());
-    results
+    sort_by_tag(results)
 }
 
 pub(super) fn get_target_id(snippets: &[&Snippet]) -> Result<Option<String>> {
@@ -103,6 +98,9 @@ pub(super) fn get_target_id(snippets: &[&Snippet]) -> Result<Option<String>> {
         bail!("Sr No. {} is out of range (1-{})", sr_no, snippets.len());
     }
 
+    // Clone the ID here because:
+    // 1. The caller may need the mutable reference to update the snippet.
+    // 2. Rust prevents holding both immutable and mutable refs to the same data.
     Ok(Some(snippets[sr_no - 1].id.clone()))
 }
 
@@ -110,12 +108,12 @@ pub(super) fn get_confirmation() -> Result<bool> {
     let mut confirm = String::new();
     io::stdin().read_line(&mut confirm)?;
 
-    Ok(confirm.trim().to_lowercase() == "y")
+    Ok(confirm.trim().eq_ignore_ascii_case("y"))
 }
 
 pub(super) fn filter_and_display_snippets<'a>(
     snippets: &'a [Snippet],
-    search_term: &str,
+    search_term: Option<String>,
     verbose: bool,
 ) -> Vec<&'a Snippet> {
     let filtered = filter_and_sort_snippets(snippets, search_term);
@@ -127,4 +125,18 @@ pub(super) fn filter_and_display_snippets<'a>(
     }
 
     filtered
+}
+
+fn sort_by_tag<'a, S>(snippets: S) -> Vec<&'a Snippet>
+where
+    S: IntoIterator<Item = &'a Snippet>,
+{
+    let mut items: Vec<_> = snippets
+        .into_iter()
+        .map(|s| (s, s.tag_or_default().to_lowercase()))
+        .collect();
+
+    items.sort_by(|a, b| a.1.cmp(&b.1));
+
+    items.into_iter().map(|(s, _)| s).collect()
 }

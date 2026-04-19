@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -5,28 +6,50 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct Snippet {
     pub id: String,
     pub content: String,
-    pub tag: String,
-    pub description: String,
-    pub shell_type: String,
+    pub tag: Option<String>,
+    pub description: Option<String>,
+    pub shell_type: Option<String>,
 }
 
 impl Snippet {
-    pub fn new(content: String, tag: String, description: String, shell_type: String) -> Self {
-        Snippet {
-            id: Self::generate_id(),
+    pub fn new(
+        content: String,
+        tag: Option<String>,
+        description: Option<String>,
+        shell_type: Option<String>,
+    ) -> Result<Self> {
+        Ok(Snippet {
+            id: Self::generate_id()?,
             content,
             tag,
             description,
             shell_type,
-        }
+        })
     }
 
-    fn generate_id() -> String {
+    fn generate_id() -> Result<String> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
+            .context("System clock is before Unix epoch (this should never happen)")?
+            .as_millis();
 
-        format!("{:x}", now)
+        Ok(format!("{:x}", now))
+    }
+
+    pub fn tag_or_default(&self) -> &str {
+        self.tag.as_deref().unwrap_or_default()
+    }
+
+    pub fn desc_or_default(&self) -> &str {
+        self.description.as_deref().unwrap_or_default()
+    }
+
+    pub fn display_tag(&self) -> String {
+        let tag = self.tag_or_default().trim();
+        if tag.is_empty() {
+            "UNTAGGED".to_string()
+        } else {
+            tag.to_ascii_uppercase()
+        }
     }
 }

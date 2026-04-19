@@ -22,21 +22,21 @@ enum Commands {
         /// The actual content of the snippet
         content: String,
         /// Categorize your snippets with a tag (e.g. -t rust)
-        #[arg(short, long, default_value = "")]
-        tag: String,
+        #[arg(short, long)]
+        tag: Option<String>,
         /// Add extra context or explaination for your snippet
-        #[arg(short, long, default_value = "")]
-        description: String,
+        #[arg(short, long)]
+        description: Option<String>,
         /// Sets default shell which is to be used for the following command's execution
-        #[arg(short, long, default_value = "")]
-        shell_type: String,
+        #[arg(short, long)]
+        shell_type: Option<String>,
     },
     /// List and search through your saved snippets
     #[command(alias = "li")]
     List {
         /// Optional Search query
-        #[arg(default_value = "")]
-        query: String,
+        #[arg()]
+        query: Option<String>,
         /// Show snippets along with their descriptions
         #[arg(short, long)]
         verbose: bool,
@@ -45,8 +45,8 @@ enum Commands {
     #[command(alias = "rm")]
     Remove {
         /// Search query to find the snippet you want to delete
-        #[arg(default_value = "")]
-        query: String,
+        #[arg()]
+        query: Option<String>,
         /// Show snippets along with their descriptions
         #[arg(short, long)]
         verbose: bool,
@@ -55,11 +55,11 @@ enum Commands {
     #[command(alias = "ex", alias = "exec")]
     Execute {
         /// Search query to find the snippet you want to execute
-        #[arg(default_value = "")]
-        query: String,
+        #[arg()]
+        query: Option<String>,
         /// Overrides the default shell for command execution if provided
-        #[arg(short, long, default_value = "")]
-        shell_type: String,
+        #[arg(short, long)]
+        shell_type: Option<String>,
         /// Show snippets along with their descriptions
         #[arg(short, long)]
         verbose: bool,
@@ -76,20 +76,20 @@ fn main() -> anyhow::Result<()> {
             description,
             shell_type,
         }) => {
-            handle_add(content, tag, description)?;
+            handle_add(content, tag, description, shell_type)?;
         }
         Some(Commands::Remove { query, verbose }) => {
-            handle_remove(&query, verbose)?;
+            handle_remove(query, verbose)?;
         }
         Some(Commands::List { query, verbose }) => {
-            handle_list(&query, verbose)?;
+            handle_list(query, verbose)?;
         }
         Some(Commands::Execute {
             query,
             shell_type,
             verbose,
         }) => {
-            handle_execute(&query, verbose, &shell_type)?;
+            handle_execute(query, shell_type, verbose)?;
         }
 
         None => {

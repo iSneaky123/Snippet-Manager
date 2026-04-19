@@ -35,7 +35,7 @@ pub fn save_snippets(snippets: &[Snippet]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .with_context(|| format!("Failed to write snippets to disk at {:?}", path))?;
-    };
+    }
 
     let mut json =
         serde_json::to_string(snippets).context("Failed to convert snippets to JSON Format")?;
