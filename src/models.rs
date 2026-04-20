@@ -11,10 +11,10 @@ pub struct Snippet {
     pub content: String,
     pub tag: Option<String>,
     pub description: Option<String>,
-    pub shell_type: Option<Shell>,
+    pub shell: Option<Shell>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Shell {
     pub name: String,
     pub command_flag: String,
@@ -26,14 +26,14 @@ impl Snippet {
         content: String,
         tag: Option<String>,
         description: Option<String>,
-        shell_type: Option<Shell>,
+        shell: Option<Shell>,
     ) -> Result<Self> {
         Ok(Snippet {
             id: Self::generate_id()?,
             content,
             tag,
             description,
-            shell_type,
+            shell,
         })
     }
 

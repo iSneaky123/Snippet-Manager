@@ -6,7 +6,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
 use crate::{
     handlers::helpers::{filter_and_display_snippets, get_confirmation, get_target_id},
@@ -67,7 +67,7 @@ pub fn handle_remove(search_term: Option<String>, verbose: bool) -> Result<()> {
 
 pub fn handle_execute(
     search_term: Option<String>,
-    _shell_type: Option<String>,
+    shell_type: Option<String>,
     verbose: bool,
 ) -> Result<()> {
     let snippets = load_snippets()?;
@@ -91,8 +91,25 @@ pub fn handle_execute(
         let Some(snippet) = snippets.iter().find(|s| s.id == target_id) else {
             bail!("Couldn't find any snippet with the id: {}", target_id);
         };
-        let mut child = Command::new("sh")
-            .arg("-c")
+
+        let shell = match shell_type {
+            Some(name) => Shell::new(name),
+            None => snippet
+                .shell
+                .as_ref()
+                .context("No shell specified for the current snippet")?
+                .clone(),
+        };
+
+        if !shell.is_supported {
+            bail!(
+                "'{}' is not a valid shell or is not currentlu supported",
+                shell.name
+            );
+        }
+
+        let mut child = Command::new(&shell.name)
+            .arg(&shell.command_flag)
             .arg(&snippet.content)
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
