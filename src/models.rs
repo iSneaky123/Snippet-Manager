@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    process::Command,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Snippet {
@@ -8,7 +11,14 @@ pub struct Snippet {
     pub content: String,
     pub tag: Option<String>,
     pub description: Option<String>,
-    pub shell_type: Option<String>,
+    pub shell_type: Option<Shell>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Shell {
+    pub name: String,
+    pub command_flag: String,
+    pub is_supported: bool,
 }
 
 impl Snippet {
@@ -16,7 +26,7 @@ impl Snippet {
         content: String,
         tag: Option<String>,
         description: Option<String>,
-        shell_type: Option<String>,
+        shell_type: Option<Shell>,
     ) -> Result<Self> {
         Ok(Snippet {
             id: Self::generate_id()?,
@@ -50,6 +60,37 @@ impl Snippet {
             "UNTAGGED".to_string()
         } else {
             tag.to_ascii_uppercase()
+        }
+    }
+}
+
+impl Shell {
+    pub fn new(name: String) -> Self {
+        let command_flag = Self::get_command_flag(&name);
+        let is_supported = Self::validate_shell(&name, &command_flag);
+        Self {
+            name,
+            command_flag,
+            is_supported,
+        }
+    }
+
+    pub fn get_command_flag(name: &str) -> String {
+        match name.to_lowercase().as_str() {
+            "cmd" | "cmd.exe" => "/c".to_string(),
+            "powershell" | "powershell.exe" => "-Command".to_string(),
+            _ => "-c".to_string(),
+        }
+    }
+
+    pub fn validate_shell(name: &str, command_flag: &str) -> bool {
+        let mut cmd = Command::new(name);
+
+        cmd.arg(command_flag).arg("");
+
+        match cmd.output() {
+            Ok(output) => output.status.success(),
+            Err(_) => false,
         }
     }
 }

@@ -10,7 +10,7 @@ use anyhow::{Result, bail};
 
 use crate::{
     handlers::helpers::{filter_and_display_snippets, get_confirmation, get_target_id},
-    models::Snippet,
+    models::{Shell, Snippet},
     storage::{load_snippets, save_snippets},
 };
 
@@ -20,7 +20,7 @@ pub fn handle_add(
     description: Option<String>,
     shell_type: Option<String>,
 ) -> Result<()> {
-    let new_snippet = Snippet::new(content, tag, description, shell_type)?;
+    let new_snippet = Snippet::new(content, tag, description, shell_type.map(Shell::new))?;
 
     let mut snippets = load_snippets()?;
     snippets.push(new_snippet);
