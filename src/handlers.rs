@@ -1,15 +1,14 @@
 mod helpers;
-mod shell_manager;
 
-use std::{
-    io::{self, Write},
-    process::{Command, Stdio},
-};
+use std::io::{self, Write};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 
 use crate::{
-    handlers::helpers::{filter_and_display_snippets, get_confirmation, get_target_id},
+    handlers::helpers::{
+        execute_snippet, filter_and_display_snippets, get_confirmation, get_target_id,
+        update_default_shell,
+    },
     models::{Shell, Snippet},
     storage::{load_snippets, save_snippets},
 };
@@ -70,7 +69,7 @@ pub fn handle_execute(
     shell_type: Option<String>,
     verbose: bool,
 ) -> Result<()> {
-    let snippets = load_snippets()?;
+    let mut snippets = load_snippets()?;
     let filtered = filter_and_display_snippets(&snippets, search_term, verbose);
 
     if filtered.is_empty() {
@@ -87,42 +86,35 @@ pub fn handle_execute(
     );
     io::stdout().flush()?;
 
-    if get_confirmation()? {
-        let Some(snippet) = snippets.iter().find(|s| s.id == target_id) else {
-            bail!("Couldn't find any snippet with the id: {}", target_id);
-        };
-
-        let shell = match shell_type {
-            Some(name) => Shell::new(name),
-            None => snippet
-                .shell
-                .as_ref()
-                .context("No shell specified for the current snippet")?
-                .clone(),
-        };
-
-        if !shell.is_supported {
-            bail!(
-                "'{}' is not a valid shell or is not currentlu supported",
-                shell.name
-            );
-        }
-
-        let mut child = Command::new(&shell.name)
-            .arg(&shell.command_flag)
-            .arg(&snippet.content)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn()?;
-
-        let status = child.wait()?;
-
-        if !status.success() {
-            eprintln!("Command exited with error: {}", status);
-        }
-    } else {
+    if !get_confirmation()? {
         println!("Aborted!");
+        return Ok(());
+    }
+
+    let snippet = snippets
+        .iter()
+        .find(|s| s.id == target_id)
+        .ok_or_else(|| anyhow!("Couldn't find any snippet with the id: {}", target_id))?;
+
+    let shell = match &shell_type {
+        Some(name) => Shell::new(name.clone()),
+        None => snippet
+            .shell
+            .as_ref()
+            .context("No shell specified for the current snippet")?
+            .clone(),
+    };
+
+    if !shell.is_supported {
+        bail!(
+            "'{}' is not a valid shell or is not currently supported",
+            shell.name
+        );
+    }
+
+    execute_snippet(&shell, &snippet.content)?;
+    if let Some(_) = shell_type {
+        update_default_shell(&mut snippets, shell, target_id)?;
     }
 
     Ok(())
