@@ -4,8 +4,7 @@
 //! backends (filesystem, memory, etc.) to be swapped without
 //! changing handler code.
 
-use anyhow::Result;
-
+use crate::errors::Result;
 use crate::models::Snippet;
 
 pub mod file_storage;

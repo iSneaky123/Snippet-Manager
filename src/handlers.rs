@@ -5,9 +5,8 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Context, Result, anyhow, bail};
-
 use crate::{
+    errors::{Result, SnipError},
     handlers::helpers::{
         execute_snippet, filter_and_display_snippets, get_confirmation, get_target_id,
         update_default_shell,
@@ -24,7 +23,12 @@ pub fn handle_add(
     shell_type: Option<String>,
     storage: Arc<dyn SnippetStorage>,
 ) -> Result<()> {
-    let new_snippet = Snippet::new(content, tag, description, shell_type.map(Shell::new))?;
+    let new_snippet = Snippet::new(
+        content,
+        tag,
+        description,
+        shell_type.map(Shell::new_unchecked),
+    )?;
 
     let mut snippets = storage.load()?;
     snippets.push(new_snippet);
@@ -111,22 +115,19 @@ pub fn handle_execute(
     let snippet = snippets
         .iter()
         .find(|s| s.id == target_id)
-        .ok_or_else(|| anyhow!("Couldn't find any snippet with the id: {}", target_id))?;
+        .ok_or_else(|| SnipError::SnippetNotFound(target_id.clone()))?;
 
     let shell = match &shell_type {
-        Some(name) => Shell::new(name.clone()),
+        Some(name) => Shell::new_unchecked(name.clone()),
         None => snippet
             .shell
             .as_ref()
-            .context("No shell specified for the current snippet")?
+            .ok_or_else(|| SnipError::ShellNotSpecified)?
             .clone(),
     };
 
-    if !shell.is_supported {
-        bail!(
-            "'{}' is not a valid shell or is not currently supported",
-            shell.name
-        );
+    if !shell.validate() {
+        return Err(SnipError::ShellNotSupported(shell.name));
     }
 
     execute_snippet(&shell, &snippet.content)?;

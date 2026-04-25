@@ -4,10 +4,12 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Result, anyhow, bail};
 use nucleo::{Config, Matcher, Utf32Str};
 
-use crate::models::{Shell, Snippet};
+use crate::{
+    errors::{Result, SnipError},
+    models::{Shell, Snippet},
+};
 
 pub(super) fn print_snippets(snippets: &[&Snippet], verbose: bool) {
     let mut current_tag: Option<String> = None;
@@ -30,7 +32,7 @@ pub(super) fn print_snippets(snippets: &[&Snippet], verbose: bool) {
             println!("    {}", s.desc_or_default());
         }
 
-        if verbose && !s.shell.is_some() {
+        if verbose && s.shell.is_some() {
             if let Some(shell) = &s.shell {
                 println!("Default shell: {}", shell.name);
             }
@@ -63,7 +65,7 @@ pub(super) fn filter_and_sort_snippets<'a>(
         .iter()
         .filter(|s| {
             let fields = [
-                (s.tag_or_default(), STRICT_SEARCH),
+                (s.tag_or_default(), AGRESSIVE_SEARCH),
                 (s.desc_or_default(), AGRESSIVE_SEARCH),
                 (s.content.as_str(), AGRESSIVE_SEARCH),
                 (s.id.as_str(), STRICT_SEARCH),
@@ -100,12 +102,16 @@ pub(super) fn get_target_id(snippets: &[&Snippet]) -> Result<Option<String>> {
         return Ok(None);
     }
 
-    let sr_no: usize = input
-        .parse()
-        .map_err(|_| anyhow!("'{}' is not a valid number", input))?;
+    let sr_no: usize = input.parse().map_err(|_| {
+        SnipError::InvalidInput(format!("Sr No. must be a number, got '{}'", input))
+    })?;
 
     if !(1..=snippets.len()).contains(&sr_no) {
-        bail!("Sr No. {} is out of range (1-{})", sr_no, snippets.len());
+        return Err(SnipError::InvalidInput(format!(
+            "Sr No. {} is out of range (expected 1-{})",
+            sr_no,
+            snippets.len()
+        )));
     }
 
     // Clone the ID here because:
@@ -175,7 +181,7 @@ pub(super) fn update_default_shell(
     storage: Arc<dyn crate::storage::SnippetStorage>,
 ) -> Result<()> {
     print!(
-        "Do you want to change the default shell for the selected snippet with '{}'? (y/N)",
+        "Do you want to change the default shell for the selected snippet with '{}'? (y/N): ",
         shell.name
     );
     io::stdout().flush()?;
@@ -184,7 +190,7 @@ pub(super) fn update_default_shell(
         let snippet = snippets
             .iter_mut()
             .find(|s| s.id == target_id)
-            .ok_or_else(|| anyhow!("Couldn't find snippet with id: {}", target_id))?;
+            .ok_or_else(|| SnipError::SnippetNotFound(target_id))?;
 
         snippet.shell = Some(shell);
         storage.save(snippets)?;

@@ -5,9 +5,8 @@
 
 use std::{fs, io::ErrorKind, path::PathBuf};
 
-use anyhow::{Context, Result};
-
 use super::SnippetStorage;
+use crate::errors::{Result, SnipError};
 use crate::models::Snippet;
 
 /// Storage backend that persists to filesystem.
@@ -21,8 +20,12 @@ impl FileStorage {
     /// This will use `~/.local/share/snip/snippets.json` on Linux,
     /// ~/Library/Application Support/snip/snippets.json1 on macOS, etc.
     pub fn new() -> Result<Self> {
-        let mut path = dirs::data_dir()
-            .context("Could not find the standard data directory on your Operating System")?;
+        let mut path = dirs::data_dir().ok_or_else(|| {
+            SnipError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Could not find the standard data directory on your Operating System",
+            ))
+        })?;
 
         path.push("snip");
         path.push("snippets.json");
@@ -49,24 +52,21 @@ impl SnippetStorage for FileStorage {
                 return Ok(vec![]);
             }
             Err(e) => {
-                return Err(e).context(format!("Failed to load snippets file at {:?}", self.path));
+                return Err(e)?;
             }
         };
 
-        serde_json::from_str(&contents).context("The snippets file is corrupted or not valid JSON")
+        serde_json::from_str(&contents).map_err(|e| SnipError::Serialization(e))
     }
 
     fn save(&self, snippets: &[Snippet]) -> Result<()> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir(parent)
-                .with_context(|| format!("Failed to write snippets to disk at {:?}", self.path))?;
+            fs::create_dir_all(parent)?
         }
 
-        let mut json =
-            serde_json::to_string(snippets).context("Failed to convert snippets to JSON format")?;
+        let mut json = serde_json::to_string(snippets)?;
         json.push('\n');
 
-        fs::write(&self.path, &json)
-            .with_context(|| format!("Failed to write snippets to dist at {:?}", self.path))
+        Ok(fs::write(&self.path, &json)?)
     }
 }

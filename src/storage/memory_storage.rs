@@ -5,9 +5,8 @@
 
 use std::cell::RefCell;
 
-use anyhow::Result;
-
 use super::SnippetStorage;
+use crate::errors::{Result, SnipError};
 use crate::models::Snippet;
 
 /// Storage backend that keeps everything in RAM.
