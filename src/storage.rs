@@ -1,48 +1,28 @@
-use std::{fs, io::ErrorKind, path::PathBuf};
+//! Storage abstraction layer for snippet persistence
+//!
+//! This module defines a trait-based storage system tgat allows different
+//! backends (filesystem, memory, etc.) to be swapped without
+//! changing handler code.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::models::Snippet;
 
-fn get_storage_path() -> Result<PathBuf> {
-    let mut path = dirs::data_dir()
-        .context("Could not find the standard data directory on your Operating System")?;
+pub mod file_storage;
+pub mod memory_storage;
 
-    path.push("snip");
-    path.push("snippets.json");
+/// Trait that all storage backends must implement.
+///
+/// This is the contract: any type implementing SnippetStorage can load
+/// and save snippets. Handlers don't care how data is accessed
+/// They just call these methods
+pub trait SnippetStorage {
+    /// Load all snippets from storage.
+    ///
+    /// Returns:
+    /// - Ok(Vec<Snippet>) with snippets (empty vec if none exist yet)
+    /// - Err if storage is unreachable or corrupted
+    fn load(&self) -> Result<Vec<Snippet>>;
 
-    Ok(path)
-}
-
-pub fn load_snippets() -> Result<Vec<Snippet>> {
-    let path = get_storage_path()?;
-
-    let contents = match std::fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(vec![]),
-        Err(e) => return Err(e).context(format!("Failed to load snippets file at {:?}", path)),
-    };
-
-    let snippets = serde_json::from_str(&contents)
-        .context("The snippets file is corrupted or not valid JSON")?;
-
-    Ok(snippets)
-}
-
-pub fn save_snippets(snippets: &[Snippet]) -> Result<()> {
-    let path = get_storage_path()?;
-
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to write snippets to disk at {:?}", path))?;
-    }
-
-    let mut json =
-        serde_json::to_string(snippets).context("Failed to convert snippets to JSON Format")?;
-    json.push('\n');
-
-    fs::write(&path, &json)
-        .with_context(|| format!("Failed to write snippets to disk at {:?}", path))?;
-
-    Ok(())
+    fn save(&self, snippets: &[Snippet]) -> Result<()>;
 }

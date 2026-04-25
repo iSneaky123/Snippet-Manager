@@ -1,15 +1,13 @@
 use std::{
     io::{self, Write},
     process::{Command, Stdio},
+    sync::Arc,
 };
 
 use anyhow::{Result, anyhow, bail};
 use nucleo::{Config, Matcher, Utf32Str};
 
-use crate::{
-    models::{Shell, Snippet},
-    storage::save_snippets,
-};
+use crate::models::{Shell, Snippet};
 
 pub(super) fn print_snippets(snippets: &[&Snippet], verbose: bool) {
     let mut current_tag: Option<String> = None;
@@ -174,6 +172,7 @@ pub(super) fn update_default_shell(
     snippets: &mut [Snippet],
     shell: Shell,
     target_id: String,
+    storage: Arc<dyn crate::storage::SnippetStorage>,
 ) -> Result<()> {
     print!(
         "Do you want to change the default shell for the selected snippet with '{}'? (y/N)",
@@ -188,7 +187,7 @@ pub(super) fn update_default_shell(
             .ok_or_else(|| anyhow!("Couldn't find snippet with id: {}", target_id))?;
 
         snippet.shell = Some(shell);
-        save_snippets(snippets)?;
+        storage.save(snippets)?;
         println!("Updated snippet successfully");
     }
 

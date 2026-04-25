@@ -2,9 +2,14 @@ mod handlers;
 mod models;
 mod storage;
 
+use std::sync::Arc;
+
 use clap::{Parser, Subcommand};
 
-use crate::handlers::{handle_add, handle_execute, handle_list, handle_remove};
+use crate::{
+    handlers::{handle_add, handle_execute, handle_list, handle_remove},
+    storage::file_storage::FileStorage,
+};
 
 #[derive(Parser)]
 #[command(name = "snip")]
@@ -67,6 +72,7 @@ enum Commands {
 }
 
 fn main() -> anyhow::Result<()> {
+    let storage = Arc::new(FileStorage::new()?);
     let cli = Cli::parse();
 
     match cli.command {
@@ -76,20 +82,20 @@ fn main() -> anyhow::Result<()> {
             description,
             shell_type,
         }) => {
-            handle_add(content, tag, description, shell_type)?;
+            handle_add(content, tag, description, shell_type, storage)?;
         }
         Some(Commands::Remove { query, verbose }) => {
-            handle_remove(query, verbose)?;
+            handle_remove(query, verbose, storage)?;
         }
         Some(Commands::List { query, verbose }) => {
-            handle_list(query, verbose)?;
+            handle_list(query, verbose, storage)?;
         }
         Some(Commands::Execute {
             query,
             shell_type,
             verbose,
         }) => {
-            handle_execute(query, shell_type, verbose)?;
+            handle_execute(query, shell_type, verbose, storage)?;
         }
 
         None => {

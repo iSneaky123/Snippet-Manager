@@ -1,6 +1,9 @@
 mod helpers;
 
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    sync::Arc,
+};
 
 use anyhow::{Context, Result, anyhow, bail};
 
@@ -10,33 +13,45 @@ use crate::{
         update_default_shell,
     },
     models::{Shell, Snippet},
-    storage::{load_snippets, save_snippets},
+    storage::SnippetStorage,
 };
 
+/// Add a new snippet.
 pub fn handle_add(
     content: String,
     tag: Option<String>,
     description: Option<String>,
     shell_type: Option<String>,
+    storage: Arc<dyn SnippetStorage>,
 ) -> Result<()> {
     let new_snippet = Snippet::new(content, tag, description, shell_type.map(Shell::new))?;
 
-    let mut snippets = load_snippets()?;
+    let mut snippets = storage.load()?;
     snippets.push(new_snippet);
 
-    save_snippets(&snippets)?;
+    storage.save(&snippets)?;
     println!("Saved Snippet successfully");
     Ok(())
 }
 
-pub fn handle_list(search_term: Option<String>, verbose: bool) -> Result<()> {
-    let snippets = load_snippets()?;
+/// List and search snippets.
+pub fn handle_list(
+    search_term: Option<String>,
+    verbose: bool,
+    storage: Arc<dyn SnippetStorage>,
+) -> Result<()> {
+    let snippets = storage.load()?;
     filter_and_display_snippets(&snippets, search_term, verbose);
     Ok(())
 }
 
-pub fn handle_remove(search_term: Option<String>, verbose: bool) -> Result<()> {
-    let mut snippets = load_snippets()?;
+/// Remove a snippet interactively.
+pub fn handle_remove(
+    search_term: Option<String>,
+    verbose: bool,
+    storage: Arc<dyn SnippetStorage>,
+) -> Result<()> {
+    let mut snippets = storage.load()?;
     let filtered = filter_and_display_snippets(&snippets, search_term, verbose);
 
     if filtered.is_empty() {
@@ -55,7 +70,7 @@ pub fn handle_remove(search_term: Option<String>, verbose: bool) -> Result<()> {
 
     if get_confirmation()? {
         snippets.retain(|s| s.id != target_id);
-        save_snippets(&snippets)?;
+        storage.save(&snippets)?;
         println!("Removed snippet successfully");
     } else {
         println!("Aborted!");
@@ -64,12 +79,14 @@ pub fn handle_remove(search_term: Option<String>, verbose: bool) -> Result<()> {
     Ok(())
 }
 
+/// Execute a snippet interactively.
 pub fn handle_execute(
     search_term: Option<String>,
     shell_type: Option<String>,
     verbose: bool,
+    storage: Arc<dyn SnippetStorage>,
 ) -> Result<()> {
-    let mut snippets = load_snippets()?;
+    let mut snippets = storage.load()?;
     let filtered = filter_and_display_snippets(&snippets, search_term, verbose);
 
     if filtered.is_empty() {
@@ -114,7 +131,7 @@ pub fn handle_execute(
 
     execute_snippet(&shell, &snippet.content)?;
     if let Some(_) = shell_type {
-        update_default_shell(&mut snippets, shell, target_id)?;
+        update_default_shell(&mut snippets, shell, target_id, storage.clone())?;
     }
 
     Ok(())
